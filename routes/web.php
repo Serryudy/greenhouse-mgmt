@@ -1,53 +1,59 @@
 <?php
 
+use App\Http\Controllers\AlertController;
+use App\Http\Controllers\ControlController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\GreenhouseController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ThresholdController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
-|
 */
 
 Route::get('/', function () {
-    return view('welcome');
+    return auth()->check() ? redirect()->route('dashboard') : redirect()->route('login');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+/*
+| All application pages. Role filtering is intentionally deferred —
+| everything is grouped under 'auth' for now.
+*/
+Route::middleware(['auth'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-Route::middleware('auth')->group(function () {
+    Route::resource('greenhouses', GreenhouseController::class);
+
+    Route::resource('devices', DeviceController::class);
+    Route::post('devices/{device}/regenerate-key', [DeviceController::class, 'regenerateKey'])
+        ->name('devices.regenerate-key');
+
+    Route::resource('thresholds', ThresholdController::class)->only(['index', 'update']);
+
+    Route::get('/alerts', [AlertController::class, 'index'])->name('alerts.index');
+    Route::patch('/alerts/{alert}/acknowledge', [AlertController::class, 'acknowledge'])->name('alerts.acknowledge');
+    Route::patch('/alerts/{alert}/resolve', [AlertController::class, 'resolve'])->name('alerts.resolve');
+
+    Route::get('/control', [ControlController::class, 'index'])->name('control.index');
+    Route::post('/control/toggle', [ControlController::class, 'toggle'])->name('control.toggle');
+
+    Route::resource('schedules', ScheduleController::class)->except(['show']);
+    Route::post('schedules/{schedule}/run-now', [ScheduleController::class, 'runNow'])->name('schedules.run-now');
+
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('/reports/export/pdf', [ReportController::class, 'exportPdf'])->name('reports.export.pdf');
+    Route::post('/reports/export/csv', [ReportController::class, 'exportCsv'])->name('reports.export.csv');
+
+    // Breeze profile management.
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Operator + Admin routes (operators and admins both allowed)
-|--------------------------------------------------------------------------
-| Placeholder routes for now; controllers/views are built in later phases.
-*/
-Route::middleware(['auth', 'role:operator'])->group(function () {
-    Route::get('/control', fn () => 'Control Panel (operator + admin)')->name('control.index');
-    Route::get('/alerts', fn () => 'Alerts (operator + admin)')->name('alerts.index');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Admin-only routes (config, thresholds, devices)
-|--------------------------------------------------------------------------
-*/
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::get('/config', fn () => 'Configuration (admin only)')->name('config.index');
-    Route::get('/thresholds', fn () => 'Thresholds (admin only)')->name('thresholds.index');
-    Route::get('/devices', fn () => 'Devices (admin only)')->name('devices.index');
 });
 
 require __DIR__.'/auth.php';
