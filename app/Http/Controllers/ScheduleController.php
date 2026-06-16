@@ -61,11 +61,15 @@ class ScheduleController extends Controller
             ->with('status', 'Schedule deleted.');
     }
 
-    public function runNow(FertigationSchedule $schedule)
+    public function runNow(FertigationSchedule $schedule, \App\Services\ScheduleRunner $runner)
     {
-        $schedule->update(['last_run_at' => now()]);
+        $delivered = $runner->run($schedule, auth()->id());
 
-        return back()->with('status', "Schedule \"{$schedule->name}\" triggered.");
+        $msg = $delivered
+            ? "Schedule \"{$schedule->name}\" triggered — pump/fertiliser commands sent."
+            : "Schedule \"{$schedule->name}\" ran, but no device is attached to this greenhouse.";
+
+        return back()->with('status', $msg);
     }
 
     private function validateData(Request $request): array

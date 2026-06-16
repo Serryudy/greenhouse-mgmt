@@ -38,7 +38,7 @@ class SensorDataController extends Controller
     /**
      * Ingest a sensor-data payload from an authenticated ESP32 device.
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, \App\Services\AutomationEngine $automation): JsonResponse
     {
         /** @var \App\Models\Device $device */
         $device = $request->attributes->get('device');
@@ -76,11 +76,15 @@ class SensorDataController extends Controller
 
         $alertsTriggered = $this->evaluateThresholds($reading, $device);
 
+        // Real-time automation: drive actuators based on the new reading.
+        $actionsTriggered = $automation->evaluate($reading, $device);
+
         return response()->json([
             'status' => 'ok',
             'reading_id' => $reading->id,
             'server_time' => now()->toIso8601String(),
             'alerts_triggered' => $alertsTriggered,
+            'actions_triggered' => $actionsTriggered,
         ]);
     }
 

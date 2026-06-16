@@ -12,7 +12,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        // Fire due fertigation schedules every minute.
+        $schedule->command('schedules:run')->everyMinute()->withoutOverlapping();
     }
 
     /**

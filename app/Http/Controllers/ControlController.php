@@ -5,7 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\ActuatorCommand;
 use App\Models\Device;
 use App\Models\Greenhouse;
-use App\Services\DeviceCommandPusher;
+use App\Services\AutomationEngine;
+use App\Services\CommandIssuer;
 use Illuminate\Http\Request;
 
 class ControlController extends Controller
@@ -51,14 +52,12 @@ class ControlController extends Controller
         $offlineDevices = ($currentGreenhouse ? $currentGreenhouse->devices() : Device::query())
             ->where('status', 'offline')->get();
 
-        // Automation rules (display-only summary tied to threshold logic).
-        $rules = [
-            ['name' => 'Low Moisture',   'condition' => 'Soil moisture < 30%', 'action' => 'Irrigation Pump → ON', 'actuator' => 'pump',            'enabled' => true],
-            ['name' => 'High Temp Vent', 'condition' => 'Temperature > 35 °C', 'action' => 'Ventilation Fan → ON', 'actuator' => 'fan',             'enabled' => true],
-            ['name' => 'Low Water',      'condition' => 'Water level < 25 cm', 'action' => 'Fill Valve → OPEN',    'actuator' => 'valve1',          'enabled' => true],
-            ['name' => 'Fertigation',    'condition' => 'On schedule',         'action' => 'Fert Pump → ON',       'actuator' => 'fertiliser_pump', 'enabled' => true],
-        ];
+        // Automation rules — sourced from the real engine so the panel reflects
+        // exactly what runs on each reading. The fertigation row is schedule-driven.
+        $rules = AutomationEngine::rules();
+        $rules[] = ['name' => 'Fertigation', 'condition' => 'On schedule', 'action' => 'Fert Pump → ON', 'actuator' => 'fertiliser_pump'];
         foreach ($rules as &$rule) {
+            $rule['enabled'] = true;
             $last = ActuatorCommand::whereIn('device_id', $deviceIds)
                 ->where('actuator', $rule['actuator'])->latest('id')->first();
             $rule['last_triggered'] = $last?->created_at;
@@ -70,7 +69,7 @@ class ControlController extends Controller
         ));
     }
 
-    public function toggle(Request $request, DeviceCommandPusher $pusher)
+    public function toggle(Request $request, CommandIssuer $issuer)
     {
         $data = $request->validate([
             'actuator' => ['required', 'in:pump,fan,valve1,valve2,fertiliser_pump'],
@@ -89,21 +88,16 @@ class ControlController extends Controller
             return response()->json(['ok' => false, 'message' => 'No device available for this greenhouse.'], 422);
         }
 
-        $command = ActuatorCommand::create([
-            'device_id' => $device->id,
-            'actuator' => $data['actuator'],
-            'command' => $data['command'],
-            'duration' => $data['duration'] ?? null,
-            'source' => 'manual',
-            'status' => 'pending',
-            'issued_by' => $request->user()->id,
-        ]);
+        $command = $issuer->issue(
+            $device,
+            $data['actuator'],
+            $data['command'],
+            $data['duration'] ?? null,
+            'manual',
+            $request->user()->id
+        );
 
-        // Try to deliver instantly; otherwise the device gets it on its next poll.
-        $delivered = $pusher->push($device, $command);
-        if ($delivered) {
-            $command->update(['status' => 'sent', 'sent_at' => now()]);
-        }
+        $delivered = $command->status === 'sent';
 
         return response()->json([
             'ok' => true,

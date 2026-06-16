@@ -126,7 +126,25 @@ php artisan serve --host=0.0.0.0 --port=8000
 # open http://127.0.0.1:8000  → log in
 ```
 
-## 1.6 Troubleshooting
+## 1.6 Background automation (real-time + scheduled)
+
+Two automation features need a word of setup:
+
+- **Sensor-driven automation** (e.g. soil < 30% → pump ON) runs **automatically**
+  inside the sensor-ingestion request — no extra process needed. It only fires on
+  live readings posted by a device.
+- **Fertigation schedules** fire via Laravel's scheduler. In **development** run:
+  ```bash
+  php artisan schedule:work        # keeps schedules firing while you work
+  ```
+  In **production**, add one cron line instead:
+  ```cron
+  * * * * * cd /path/to/greenhouse-mgmt && php artisan schedule:run >> /dev/null 2>&1
+  ```
+  You can also fire due schedules manually any time: `php artisan schedules:run`.
+  ("Run Now" on the Schedules page always works without the scheduler.)
+
+## 1.7 Troubleshooting
 
 | Symptom | Fix |
 |---|---|
